@@ -111,52 +111,84 @@ async def update_todo_text(todo_id: int, todo_update: TodoUpdate):
 
 @app.post("/generate-report")
 async def generate_report():
-    """生成工作日报（基于未完成的待办事项）"""
+    """生成工作日报（包含已完成和未完成的任务）"""
     api_key = get_ai_api_key()
     
-    # 从 SQLite 获取所有未完成的任务
-    incomplete_todos = database.get_incomplete_todos()
+    # 从 SQLite 获取所有任务
+    all_todos = database.get_all_todos()
     
-    if not incomplete_todos:
-        return {"report": "🎉 太棒了！你已经完成了所有待办事项！"}
+    if not all_todos:
+        return {"report": "当前没有任何待办事项。"}
     
-    # 构建待办事项文本
-    todo_text = "\n".join([
+    # 分类任务
+    completed_todos = [t for t in all_todos if t['completed']]
+    incomplete_todos = [t for t in all_todos if not t['completed']]
+    
+    # 构建任务列表文本
+    completed_text = "\n".join([
+        f"{i + 1}. {todo['text']}"
+        for i, todo in enumerate(completed_todos)
+    ]) if completed_todos else "无"
+    
+    incomplete_text = "\n".join([
         f"{i + 1}. {todo['text']}"
         for i, todo in enumerate(incomplete_todos)
-    ])
+    ]) if incomplete_todos else "无"
     
-    # 改进的 AI 提示词，确保列出所有待办事项
+    total_count = len(all_todos)
+    
+    # 改进的 AI 提示词 - 生成纯文本格式（非 Markdown）
     request_body = {
         "model": "gpt-3.5-turbo",
         "messages": [
             {
                 "role": "system",
-                "content": "你是一个工作总结助手。请根据用户提供的待办事项列表，生成一份简洁、专业的工作日报。日报必须包含：**待办事项：** 部分逐条列出所有待办事项，然后添加 **总结：** 和 **备注：** 部分。"
+                "content": f"""你是一个专业的工作总结助手。请生成一份清晰的纯文本工作日报（不要使用Markdown格式，不要使用**符号）。
+
+要求：
+1. 完整列出所有已完成和未完成的任务
+2. 总结部分需要详细（至少{max(3, total_count // 2)}句话），要涵盖主要工作内容、进展情况、重点任务等
+3. 使用纯文本格式，不要使用任何Markdown标记（如 ** ）
+4. 使用换行和缩进来组织内容"""
             },
             {
                 "role": "user",
-                "content": f"""请为以下待办事项生成工作日报，必须在 **待办事项：** 部分完整列出所有事项：
+                "content": f"""请为以下任务生成详细的工作日报（纯文本格式，不要使用**等Markdown符号）：
 
-{todo_text}
+已完成的任务（共{len(completed_todos)}项）：
+{completed_text}
 
-请严格按照以下格式生成日报：
+未完成的任务（共{len(incomplete_todos)}项）：
+{incomplete_text}
 
-**工作日报**
+请按照以下格式生成日报（使用纯文本，不要Markdown格式）：
 
-**日期：** [今天的日期]
+工作日报
 
-**待办事项：**
+日期：[今天的日期]
 
-1. [第一项任务]
-2. [第二项任务]
-...
+一、已完成任务（{len(completed_todos)}项）
 
-**总结：**
-[简要总结今天的工作重点]
+{completed_text if completed_todos else '暂无已完成任务'}
 
-**备注：**
-[添加任何额外的注释或特别事项]"""
+二、未完成任务（{len(incomplete_todos)}项）
+
+{incomplete_text if incomplete_todos else '暂无未完成任务'}
+
+三、工作总结
+
+[详细总结，至少包含{max(3, total_count // 2)}个方面：
+- 今天完成的主要工作及成果
+- 当前进行中的重点任务
+- 遇到的问题或挑战
+- 下一步工作计划
+等]
+
+四、备注
+
+[特别事项或需要关注的内容]
+
+注意：请使用纯文本格式输出，不要使用任何Markdown标记符号。"""
             }
         ]
     }
@@ -189,24 +221,35 @@ async def generate_report_stream():
     """生成工作日报（流式输出）- 前端逐字显示"""
     api_key = get_ai_api_key()
     
-    # 从 SQLite 获取所有未完成的任务
-    incomplete_todos = database.get_incomplete_todos()
+    # 从 SQLite 获取所有任务
+    all_todos = database.get_all_todos()
     
-    if not incomplete_todos:
+    if not all_todos:
         # 非流式返回
         async def simple_generator():
-            yield "🎉 太棒了！你已经完成了所有待办事项！"
+            yield "当前没有任何待办事项。"
         
         return StreamingResponse(
             simple_generator(),
             media_type="text/plain; charset=utf-8"
         )
     
-    # 构建待办事项文本
-    todo_text = "\n".join([
+    # 分类任务
+    completed_todos = [t for t in all_todos if t['completed']]
+    incomplete_todos = [t for t in all_todos if not t['completed']]
+    
+    # 构建任务列表文本
+    completed_text = "\n".join([
+        f"{i + 1}. {todo['text']}"
+        for i, todo in enumerate(completed_todos)
+    ]) if completed_todos else "无"
+    
+    incomplete_text = "\n".join([
         f"{i + 1}. {todo['text']}"
         for i, todo in enumerate(incomplete_todos)
-    ])
+    ]) if incomplete_todos else "无"
+    
+    total_count = len(all_todos)
     
     # 流式生成器
     async def stream_generator():
@@ -215,31 +258,52 @@ async def generate_report_stream():
             "messages": [
                 {
                     "role": "system",
-                    "content": "你是一个工作总结助手。请根据用户提供的待办事项列表，生成一份简洁、专业的工作日报。日报必须包含：**待办事项：** 部分逐条列出所有待办事项，然后添加 **总结：** 和 **备注：** 部分。"
+                    "content": f"""你是一个专业的工作总结助手。请生成一份清晰的纯文本工作日报（不要使用Markdown格式，不要使用**符号）。
+
+要求：
+1. 完整列出所有已完成和未完成的任务
+2. 总结部分需要详细（至少{max(3, total_count // 2)}句话），要涵盖主要工作内容、进展情况、重点任务等
+3. 使用纯文本格式，不要使用任何Markdown标记（如 ** ）
+4. 使用换行和缩进来组织内容"""
                 },
                 {
                     "role": "user",
-                    "content": f"""请为以下待办事项生成工作日报，必须在 **待办事项：** 部分完整列出所有事项：
+                    "content": f"""请为以下任务生成详细的工作日报（纯文本格式，不要使用**等Markdown符号）：
 
-{todo_text}
+已完成的任务（共{len(completed_todos)}项）：
+{completed_text}
 
-请严格按照以下格式生成日报：
+未完成的任务（共{len(incomplete_todos)}项）：
+{incomplete_text}
 
-**工作日报**
+请按照以下格式生成日报（使用纯文本，不要Markdown格式）：
 
-**日期：** [今天的日期]
+工作日报
 
-**待办事项：**
+日期：[今天的日期]
 
-1. [第一项任务]
-2. [第二项任务]
-...
+一、已完成任务（{len(completed_todos)}项）
 
-**总结：**
-[简要总结今天的工作重点]
+{completed_text if completed_todos else '暂无已完成任务'}
 
-**备注：**
-[添加任何额外的注释或特别事项]"""
+二、未完成任务（{len(incomplete_todos)}项）
+
+{incomplete_text if incomplete_todos else '暂无未完成任务'}
+
+三、工作总结
+
+[详细总结，至少包含{max(3, total_count // 2)}个方面：
+- 今天完成的主要工作及成果
+- 当前进行中的重点任务
+- 遇到的问题或挑战
+- 下一步工作计划
+等]
+
+四、备注
+
+[特别事项或需要关注的内容]
+
+注意：请使用纯文本格式输出，不要使用任何Markdown标记符号。"""
                 }
             ],
             "stream": True  # 启用流式输出
