@@ -1,0 +1,58 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# Virtual Environment
+.venv/
+venv/
+ENV/
+env/
+
+# SQLite Database
+backend/todos.db
+backend/*.db
+
+# Node.js
+node_modules/
+frontend/node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Build outputs
+frontend/dist/
+frontend/build/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+backend/backend.log
+frontend/frontend.log
+backend/server.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test files (not for final archive)
+test_backend.sh
+TEST_RESULTS.md
+SYSTEM_READY.md
+QUICK_START.txt
+index.html
+
+# Process files
+*.pid
