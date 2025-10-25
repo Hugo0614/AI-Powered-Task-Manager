@@ -4,11 +4,14 @@
  */
 
 import { useState } from 'react'
+import { useTranslation } from '../translations'
 
-function TodoItem({ todo, onToggle, onDelete, onUpdate, onBreakdown }) {
+function TodoItem({ todo, onToggle, onDelete, onUpdate, onBreakdown, language }) {
   const [isEditing, setIsEditing] = useState(false)
   const [editText, setEditText] = useState(todo.text)
   const [isBreaking, setIsBreaking] = useState(false)
+  
+  const t = useTranslation(language)
 
   // 保存编辑
   const handleSave = async () => {
@@ -45,7 +48,7 @@ function TodoItem({ todo, onToggle, onDelete, onUpdate, onBreakdown }) {
       />
 
       {/* 文本内容或编辑框 */}
-      <div className="flex-1 min-w-0">
+      <div className="flex-1 min-w-0 flex items-center gap-2">
         {isEditing ? (
           <input
             type="text"
@@ -59,15 +62,23 @@ function TodoItem({ todo, onToggle, onDelete, onUpdate, onBreakdown }) {
             autoFocus
           />
         ) : (
-          <span
-            className={`block truncate ${
-              todo.completed ? 'line-through text-gray-400' : 'text-gray-800'
-            }`}
-            onDoubleClick={() => !todo.completed && setIsEditing(true)}
-            title="双击编辑"
-          >
-            {todo.text}
-          </span>
+          <>
+            <span
+              className={`block truncate ${
+                todo.completed ? 'line-through text-gray-400' : 'text-gray-800'
+              }`}
+              onDoubleClick={() => !todo.completed && setIsEditing(true)}
+              title={t.editHint}
+            >
+              {todo.text}
+            </span>
+            {/* NEW 标签 - 新创建的任务显示 */}
+            {todo.is_new && !todo.completed && (
+              <span className="px-2 py-0.5 text-[10px] font-bold bg-gradient-to-r from-orange-400 to-red-500 text-white rounded-full shadow-sm animate-pulse flex-shrink-0">
+                NEW
+              </span>
+            )}
+          </>
         )}
       </div>
 
@@ -79,13 +90,13 @@ function TodoItem({ todo, onToggle, onDelete, onUpdate, onBreakdown }) {
               onClick={handleSave}
               className="px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
             >
-              ✓ 保存
+              {t.save}
             </button>
             <button
               onClick={handleCancel}
               className="px-2 py-1 text-xs bg-gray-400 text-white rounded hover:bg-gray-500 transition-colors"
             >
-              ✕ 取消
+              {t.cancel}
             </button>
           </>
         ) : (
@@ -95,9 +106,9 @@ function TodoItem({ todo, onToggle, onDelete, onUpdate, onBreakdown }) {
               <button
                 onClick={() => setIsEditing(true)}
                 className="px-2 py-1 text-xs bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors opacity-0 group-hover:opacity-100"
-                title="编辑"
+                title={t.editHint}
               >
-                ✏️ 编辑
+                {t.edit}
               </button>
             )}
 
@@ -111,9 +122,9 @@ function TodoItem({ todo, onToggle, onDelete, onUpdate, onBreakdown }) {
                     ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
                     : 'bg-purple-500 text-white hover:bg-purple-600'
                 }`}
-                title="AI 任务分解"
+                title={t.aiBreakdown}
               >
-                {isBreaking ? '⏳' : '🪄'} AI分解
+                {isBreaking ? '⏳' : t.aiBreakdown}
               </button>
             )}
 
@@ -121,9 +132,9 @@ function TodoItem({ todo, onToggle, onDelete, onUpdate, onBreakdown }) {
             <button
               onClick={() => onDelete(todo.id)}
               className="px-2 py-1 text-xs bg-red-500 text-white rounded hover:bg-red-600 transition-colors"
-              title="删除"
+              title={t.delete}
             >
-              🗑️ 删除
+              {t.delete}
             </button>
           </>
         )}

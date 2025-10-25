@@ -31,7 +31,9 @@ def init_database():
             CREATE TABLE IF NOT EXISTS todos (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 text TEXT NOT NULL,
-                completed BOOLEAN NOT NULL DEFAULT 0
+                completed BOOLEAN NOT NULL DEFAULT 0,
+                is_new BOOLEAN NOT NULL DEFAULT 1,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
     print("✅ 数据库初始化成功")
@@ -42,15 +44,35 @@ def get_all_todos() -> List[Dict]:
     """获取所有待办事项"""
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT id, text, completed FROM todos ORDER BY id DESC")
+        cursor.execute("""
+            SELECT id, text, completed, is_new, created_at,
+                   (julianday('now') - julianday(created_at)) * 24 as hours_since_creation
+            FROM todos 
+            ORDER BY id DESC
+        """)
         rows = cursor.fetchall()
-        return [dict(row) for row in rows]
+        todos = []
+        for row in rows:
+            todo = dict(row)
+            # Auto-expire 'is_new' flag after 1 hour
+            hours = todo.get('hours_since_creation')
+            if todo.get('is_new') and hours is not None and hours > 1:
+                cursor.execute("UPDATE todos SET is_new = 0 WHERE id = ?", (todo['id'],))
+                todo['is_new'] = False
+            todos.append(todo)
+        conn.commit()
+        return todos
 
 def get_incomplete_todos() -> List[Dict]:
     """获取所有未完成的待办事项（用于 AI 日报）"""
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT id, text, completed FROM todos WHERE completed = 0 ORDER BY id DESC")
+        cursor.execute("""
+            SELECT id, text, completed, is_new, created_at 
+            FROM todos 
+            WHERE completed = 0 
+            ORDER BY id DESC
+        """)
         rows = cursor.fetchall()
         return [dict(row) for row in rows]
 
@@ -58,7 +80,11 @@ def get_todo_by_id(todo_id: int) -> Optional[Dict]:
     """根据 ID 获取单个待办事项"""
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT id, text, completed FROM todos WHERE id = ?", (todo_id,))
+        cursor.execute("""
+            SELECT id, text, completed, is_new, created_at 
+            FROM todos 
+            WHERE id = ?
+        """, (todo_id,))
         row = cursor.fetchone()
         return dict(row) if row else None
 
@@ -66,9 +92,12 @@ def create_todo(text: str) -> Dict:
     """创建新的待办事项"""
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute("INSERT INTO todos (text, completed) VALUES (?, 0)", (text,))
+        cursor.execute("""
+            INSERT INTO todos (text, completed, is_new) 
+            VALUES (?, 0, 1)
+        """, (text,))
         new_id = cursor.lastrowid
-        return {"id": new_id, "text": text, "completed": False}
+        return {"id": new_id, "text": text, "completed": False, "is_new": True}
 
 def delete_todo(todo_id: int) -> bool:
     """删除待办事项"""
@@ -92,7 +121,11 @@ def toggle_todo(todo_id: int) -> Optional[Dict]:
         cursor.execute("UPDATE todos SET completed = ? WHERE id = ?", (new_status, todo_id))
         
         # 返回更新后的数据
-        cursor.execute("SELECT id, text, completed FROM todos WHERE id = ?", (todo_id,))
+        cursor.execute("""
+            SELECT id, text, completed, is_new, created_at 
+            FROM todos 
+            WHERE id = ?
+        """, (todo_id,))
         updated_row = cursor.fetchone()
         return dict(updated_row) if updated_row else None
 
@@ -106,7 +139,11 @@ def update_todo_text(todo_id: int, new_text: str) -> Optional[Dict]:
             return None
         
         # 返回更新后的数据
-        cursor.execute("SELECT id, text, completed FROM todos WHERE id = ?", (todo_id,))
+        cursor.execute("""
+            SELECT id, text, completed, is_new, created_at 
+            FROM todos 
+            WHERE id = ?
+        """, (todo_id,))
         updated_row = cursor.fetchone()
         return dict(updated_row) if updated_row else None
 
@@ -116,7 +153,19 @@ def create_bulk_todos(texts: List[str]) -> List[Dict]:
     with get_db_connection() as conn:
         cursor = conn.cursor()
         for text in texts:
-            cursor.execute("INSERT INTO todos (text, completed) VALUES (?, 0)", (text,))
+            cursor.execute("""
+                INSERT INTO todos (text, completed, is_new) 
+                VALUES (?, 0, 1)
+            """, (text,))
             new_id = cursor.lastrowid
-            created_todos.append({"id": new_id, "text": text, "completed": False})
+            created_todos.append({"id": new_id, "text": text, "completed": False, "is_new": True})
     return created_todos
+
+def delete_all_todos() -> int:
+    """删除所有待办事项，返回删除的数量"""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM todos")
+        count = cursor.fetchone()[0]
+        cursor.execute("DELETE FROM todos")
+        return count

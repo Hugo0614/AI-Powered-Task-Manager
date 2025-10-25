@@ -1,10 +1,11 @@
 /**
  * 健壮的 AI 待办事项管理 - 主应用组件
- * 包含：完整CRUD、筛选器、编辑功能、AI日报生成、AI任务分解
+ * 包含：完整CRUD、筛选器、编辑功能、AI日报生成、AI任务分解、多语言支持
  */
 
 import { useState, useEffect } from 'react'
 import TodoItem from './components/TodoItem'
+import { useTranslation } from './translations'
 
 // API 基础 URL
 const API_BASE = 'http://localhost:8001'
@@ -14,9 +15,21 @@ function App() {
   const [todos, setTodos] = useState([])
   const [inputValue, setInputValue] = useState('')
   const [filter, setFilter] = useState('all') // 'all' | 'active' | 'completed'
-  const [report, setReport] = useState('点击下方按钮生成工作日报...')
+  const [report, setReport] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [language, setLanguage] = useState(() => {
+    // 从 localStorage 读取语言设置，默认简体中文
+    return localStorage.getItem('language') || 'simplified'
+  })
+  
+  const t = useTranslation(language)
+  
+  // 当语言改变时保存到 localStorage
+  useEffect(() => {
+    localStorage.setItem('language', language)
+    setReport(t.reportPlaceholder)
+  }, [language, t.reportPlaceholder])
 
   // ========== 初始化加载 ==========
   useEffect(() => {
@@ -42,7 +55,7 @@ function App() {
   // 添加新待办事项
   const addTodo = async () => {
     if (!inputValue.trim()) {
-      alert('⚠️ 请输入待办事项内容！')
+      alert(t.emptyWarning)
       return
     }
 
@@ -83,7 +96,7 @@ function App() {
 
   // 删除待办事项
   const deleteTodo = async (id) => {
-    if (!confirm('确定要删除这个待办事项吗？')) return
+    if (!confirm(t.deleteConfirm)) return
 
     try {
       const response = await fetch(`${API_BASE}/todos/${id}`, {
@@ -97,6 +110,27 @@ function App() {
     } catch (err) {
       setError(`❌ ${err.message}`)
       console.error('Delete todo error:', err)
+    }
+  }
+
+  // 删除所有待办事项
+  const deleteAllTodos = async () => {
+    if (!confirm(t.deleteAllConfirm)) return
+
+    try {
+      const response = await fetch(`${API_BASE}/todos`, {
+        method: 'DELETE'
+      })
+      
+      if (!response.ok) throw new Error('删除失败')
+      
+      const data = await response.json()
+      await fetchTodos()
+      setError('')
+      alert(`✅ ${data.message}`)
+    } catch (err) {
+      setError(`❌ ${err.message}`)
+      console.error('Delete all todos error:', err)
     }
   }
 
@@ -129,7 +163,9 @@ function App() {
 
     try {
       const response = await fetch(`${API_BASE}/generate-report-stream`, {
-        method: 'POST'
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ language })
       })
 
       if (!response.ok) {
@@ -196,16 +232,54 @@ function App() {
     completed: todos.filter(t => t.completed).length
   }
 
+  // 获取当前日期（格式化为中文）
+  const getCurrentDate = () => {
+    const today = new Date()
+    const year = today.getFullYear()
+    const month = String(today.getMonth() + 1).padStart(2, '0')
+    const day = String(today.getDate()).padStart(2, '0')
+    return `${year}年${month}月${day}日`
+  }
+
   // ========== 渲染 UI ==========
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 py-8 px-4">
       <div className="max-w-5xl mx-auto">
-        {/* 标题 */}
-        <h1 className="text-4xl font-bold text-center text-indigo-900 mb-2">
-          ✨ 健壮的 AI 待办事项管理
-        </h1>
+        {/* 标题和语言选择器 */}
+        <div className="flex justify-between items-start mb-2">
+          <div>
+            <h1 className="text-4xl font-bold text-indigo-900">
+              {t.appTitle}
+            </h1>
+            <p className="text-sm text-gray-500 mt-1">📅 {getCurrentDate()}</p>
+          </div>
+          <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-lg shadow-sm border border-gray-200">
+            <span className="text-sm text-gray-600">{t.language}:</span>
+            <button
+              onClick={() => setLanguage('simplified')}
+              className={`px-3 py-1 text-sm rounded transition-colors ${
+                language === 'simplified'
+                  ? 'bg-indigo-600 text-white font-semibold'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              {t.languageSimplified}
+            </button>
+            <button
+              onClick={() => setLanguage('traditional')}
+              className={`px-3 py-1 text-sm rounded transition-colors ${
+                language === 'traditional'
+                  ? 'bg-indigo-600 text-white font-semibold'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              {t.languageTraditional}
+            </button>
+          </div>
+        </div>
+        
         <p className="text-center text-gray-600 mb-8">
-          💾 SQLite 持久化 | 🤖 AI 智能助手 | 🎯 完整功能
+          {t.appSubtitle}
         </p>
 
         {/* 错误提示 */}
@@ -219,11 +293,22 @@ function App() {
         <div className="bg-white rounded-lg shadow-sm p-4 mb-6 border border-gray-200">
           <div className="flex justify-between items-center">
             <div className="text-sm text-gray-600">
-              🔌 后端: <code className="bg-gray-100 px-2 py-1 rounded">{API_BASE}</code>
-              {todos.length > 0 && <span className="ml-4 text-green-600">✅ 已连接</span>}
+              🔌 {t.backend}: <code className="bg-gray-100 px-2 py-1 rounded">{API_BASE}</code>
+              {todos.length > 0 && <span className="ml-4 text-green-600">✅ {t.connected}</span>}
             </div>
-            <div className="text-sm text-gray-600">
-              📊 共 {stats.total} 项 | ⏳ 待办 {stats.active} | ✅ 完成 {stats.completed}
+            <div className="flex items-center gap-4">
+              <div className="text-sm text-gray-600">
+                📊 {t.totalItems} {stats.total} {t.items} | ⏳ {t.pending} {stats.active} | ✅ {t.completed} {stats.completed}
+              </div>
+              {stats.total > 0 && (
+                <button
+                  onClick={deleteAllTodos}
+                  className="px-3 py-1 text-xs bg-red-500 text-white rounded hover:bg-red-600 transition-colors font-semibold shadow-sm"
+                  title={t.deleteAllConfirm}
+                >
+                  {t.deleteAllButton}
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -236,14 +321,14 @@ function App() {
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
               onKeyPress={(e) => e.key === 'Enter' && addTodo()}
-              placeholder="输入新的待办事项...（按 Enter 快速添加）"
+              placeholder={t.inputPlaceholder}
               className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none text-base"
             />
             <button
               onClick={addTodo}
               className="bg-indigo-600 text-white px-8 py-3 rounded-lg hover:bg-indigo-700 transition-colors font-semibold shadow-sm"
             >
-              ➕ 添加
+              {t.addButton}
             </button>
           </div>
         </div>
@@ -252,9 +337,9 @@ function App() {
         <div className="bg-white rounded-lg shadow-md p-4 mb-6 border border-gray-200">
           <div className="flex gap-2 justify-center">
             {[
-              { value: 'all', label: '📋 全部', count: stats.total },
-              { value: 'active', label: '⏳ 待办', count: stats.active },
-              { value: 'completed', label: '✅ 已完成', count: stats.completed }
+              { value: 'all', label: t.filterAll, count: stats.total },
+              { value: 'active', label: t.filterActive, count: stats.active },
+              { value: 'completed', label: t.filterCompleted, count: stats.completed }
             ].map(({ value, label, count }) => (
               <button
                 key={value}
@@ -275,20 +360,20 @@ function App() {
         <div className="bg-gradient-to-br from-white to-gray-50 rounded-lg shadow-md p-6 mb-6 border border-gray-200">
           <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
             <span>
-              {filter === 'all' && '📋 所有事项'}
-              {filter === 'active' && '⏳ 待办事项'}
-              {filter === 'completed' && '✅ 已完成事项'}
+              {filter === 'all' && t.allItems}
+              {filter === 'active' && t.activeItems}
+              {filter === 'completed' && t.completedItems}
             </span>
             <span className="text-sm font-normal text-gray-500">
-              (双击任务可编辑)
+              {t.doubleClickHint}
             </span>
           </h2>
           
           {filteredTodos.length === 0 ? (
             <p className="text-gray-400 text-center py-12 text-lg">
-              {filter === 'all' && '暂无待办事项，快来添加一个吧！'}
-              {filter === 'active' && '🎉 太棒了！没有待办事项了！'}
-              {filter === 'completed' && '还没有完成任何事项'}
+              {filter === 'all' && t.noTodos}
+              {filter === 'active' && t.noActive}
+              {filter === 'completed' && t.noCompleted}
             </p>
           ) : (
             <ul className="space-y-3">
@@ -300,6 +385,7 @@ function App() {
                   onDelete={deleteTodo}
                   onUpdate={updateTodo}
                   onBreakdown={breakdownTask}
+                  language={language}
                 />
               ))}
             </ul>
@@ -309,17 +395,17 @@ function App() {
         {/* AI 工作日报 */}
         <div className="bg-white rounded-lg shadow-md p-6 border border-gray-200">
           <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-bold text-gray-800">🤖 AI 工作日报</h2>
+            <h2 className="text-xl font-bold text-gray-800">{t.aiReport}</h2>
             <button
               onClick={generateReport}
-              disabled={loading || stats.active === 0}
+              disabled={loading || stats.total === 0}
               className={`px-6 py-2 rounded-lg font-semibold transition-colors shadow-sm ${
-                loading || stats.active === 0
+                loading || stats.total === 0
                   ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
                   : 'bg-green-600 text-white hover:bg-green-700'
               }`}
             >
-              {loading ? '🔄 生成中...' : '📝 生成日报'}
+              {loading ? t.generating : t.generateReport}
             </button>
           </div>
 
@@ -328,7 +414,7 @@ function App() {
           </div>
 
           <p className="text-xs text-gray-500 mt-3">
-            �� 提示：AI 会根据未完成的待办事项生成专业的工作日报
+            {t.reportHint}
           </p>
         </div>
       </div>
